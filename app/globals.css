@@ -69,6 +69,10 @@ textarea {
     resize: vertical;
 }
 
+.prompt-textarea {
+    min-height: 220px;
+}
+
 button {
     border: 1px solid transparent;
     border-radius: 10px;

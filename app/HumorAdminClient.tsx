@@ -319,6 +319,7 @@ export default function HumorAdminClient({
             );
 
             setTestResults(body.results);
+            setSelectedImageIds(new Set());
             setStatus("Test run finished.");
         });
     }

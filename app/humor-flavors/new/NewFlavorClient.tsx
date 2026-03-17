@@ -360,7 +360,8 @@ export default function NewFlavorClient({ initialLookups }: Props) {
               <label>
                 System Prompt
                 <textarea
-                  rows={3}
+                  className="prompt-textarea"
+                  rows={8}
                   value={activeStep.llm_system_prompt}
                   onChange={(event) =>
                     updateStep(effectiveActiveStepIndex, (prev) => ({
@@ -374,7 +375,8 @@ export default function NewFlavorClient({ initialLookups }: Props) {
               <label>
                 User Prompt Template
                 <textarea
-                  rows={3}
+                  className="prompt-textarea"
+                  rows={8}
                   value={activeStep.llm_user_prompt}
                   onChange={(event) =>
                     updateStep(effectiveActiveStepIndex, (prev) => ({
