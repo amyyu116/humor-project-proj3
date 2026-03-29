@@ -37,6 +37,14 @@ export async function POST(req: Request, { params }: Params) {
     return NextResponse.json({ error: "No Supabase session token found" }, { status: 401 });
   }
 
+  const { data: imageRows } = await admin.supabase
+    .from("images")
+    .select("id, url")
+    .in("id", imageIds);
+  const imageUrlById = new Map(
+    (imageRows ?? []).map((row) => [row.id, row.url]),
+  );
+
   const { data: flavor, error: flavorError } = await admin.supabase
     .from("humor_flavors")
     .select("id, slug, humor_flavor_steps(*)")
@@ -59,30 +67,50 @@ export async function POST(req: Request, { params }: Params) {
     );
   }
 
-  const results = [];
+  const maxConcurrency = Number(
+    process.env.CAPTION_TEST_CONCURRENCY ?? "4",
+  );
+  const safeConcurrency = Number.isFinite(maxConcurrency)
+    ? Math.max(1, Math.min(Math.floor(maxConcurrency), imageIds.length))
+    : 1;
+  const results = new Array(imageIds.length);
+  let cursor = 0;
 
-  for (const imageId of imageIds) {
-    try {
-      const runResult = await runPromptChain({
-        imageId,
-        humorFlavorId: flavorId,
-        steps,
-        bearerToken: admin.accessToken,
-      });
+  const runWorker = async () => {
+    while (true) {
+      const index = cursor;
+      cursor += 1;
+      if (index >= imageIds.length) {
+        break;
+      }
+      const imageId = imageIds[index];
+      try {
+        const runResult = await runPromptChain({
+          imageId,
+          imageUrl: imageUrlById.get(imageId),
+          humorFlavorId: flavorId,
+          steps,
+          bearerToken: admin.accessToken,
+        });
 
-      results.push({
-        image_id: imageId,
-        captions: runResult.captions,
-        final_output: runResult.finalOutput,
-        step_outputs: runResult.steps,
-      });
-    } catch (error) {
-      results.push({
-        image_id: imageId,
-        error: error instanceof Error ? error.message : "Unknown error",
-      });
+        results[index] = {
+          image_id: imageId,
+          captions: runResult.captions,
+          final_output: runResult.finalOutput,
+          step_outputs: runResult.steps,
+        };
+      } catch (error) {
+        results[index] = {
+          image_id: imageId,
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
     }
-  }
+  };
+
+  await Promise.all(
+    Array.from({ length: safeConcurrency }, () => runWorker()),
+  );
 
   return NextResponse.json({
     flavor_id: flavor.id,

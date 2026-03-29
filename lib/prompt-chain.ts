@@ -13,6 +13,7 @@ export type PromptChainStep = {
 
 type RunPromptChainInput = {
     imageId: string;
+    imageUrl?: string | null;
     humorFlavorId: number;
     steps: PromptChainStep[];
     bearerToken: string;
@@ -131,37 +132,67 @@ function extractCaptionsFromResponse(body: unknown): string[] {
 
 async function generateCaptionsFromApi(
     imageId: string,
+    imageUrl: string | null | undefined,
     humorFlavorId: number,
     bearerToken: string,
 ): Promise<string[]> {
     const baseUrl = process.env.ALMOSTCRACKD_API_URL ?? DEFAULT_BASE_URL;
     const captionPath =
         process.env.ALMOSTCRACKD_CAPTION_PATH ?? DEFAULT_CAPTION_PATH;
+    const requestBody = JSON.stringify({
+        imageId,
+        humorFlavorId,
+    });
+
+    console.log("[prompt-chain] generate-captions request", {
+        url: `${baseUrl}${captionPath}`,
+        imageId,
+        humorFlavorId,
+    });
+
     const response = await fetch(`${baseUrl}${captionPath}`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${bearerToken}`,
         },
-        body: JSON.stringify({
-            imageId,
-            humorFlavorId,
-        }),
+        body: requestBody,
+    });
+
+    const responseText = await response.text().catch(() => "");
+
+    console.log("[prompt-chain] generate-captions response", {
+        status: response.status,
+        statusText: response.statusText,
+        body: responseText.slice(0, 2000),
     });
 
     if (!response.ok) {
-        const errorBody = await response.text();
+        const errorBody = responseText;
         throw new Error(
             `REST API call failed (${response.status}): ${errorBody}`,
         );
     }
 
-    const body = (await response.json()) as unknown;
+    let body: unknown = null;
+    if (responseText) {
+        try {
+            body = JSON.parse(responseText) as unknown;
+        } catch (parseError) {
+            throw new Error(
+                `REST API call failed (invalid JSON): ${responseText.slice(
+                    0,
+                    2000,
+                )}`,
+            );
+        }
+    }
     return extractCaptionsFromResponse(body);
 }
 
 export async function runPromptChain({
     imageId,
+    imageUrl,
     humorFlavorId,
     steps,
     bearerToken,
@@ -169,6 +200,7 @@ export async function runPromptChain({
     const orderedSteps = [...steps].sort((a, b) => a.order_by - b.order_by);
     const captions = await generateCaptionsFromApi(
         imageId,
+        imageUrl,
         humorFlavorId,
         bearerToken,
     );

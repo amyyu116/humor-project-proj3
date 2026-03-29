@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import FlavorEditor from "./humor-admin/components/FlavorEditor";
 import FlavorSidebar from "./humor-admin/components/FlavorSidebar";
 import ImageTestPanel from "./humor-admin/components/ImageTestPanel";
@@ -16,8 +17,10 @@ import {
 import {
     normalizeFlavors,
     PAGE_LENGTH,
+    IMAGE_PAGE_LENGTH,
     requestJson,
     THEME_KEY,
+    FLAVOR_DUPLICATE_STORAGE_KEY,
 } from "./humor-admin/utils";
 
 export default function HumorAdminClient({
@@ -26,6 +29,7 @@ export default function HumorAdminClient({
     initialImages,
     userEmail,
 }: HumorAdminProps) {
+    const router = useRouter();
     const [flavors, setFlavors] = useState<Flavor[]>(
         normalizeFlavors(initialFlavors),
     );
@@ -43,6 +47,7 @@ export default function HumorAdminClient({
     const [loading, setLoading] = useState(false);
 
     const [imageSearchTerm, setImageSearchTerm] = useState("");
+    const [imagePage, setImagePage] = useState(1);
     const [selectedImageIds, setSelectedImageIds] = useState<Set<string>>(
         new Set(),
     );
@@ -98,6 +103,17 @@ export default function HumorAdminClient({
         });
     }, [imageSearchTerm, images]);
 
+    const imageTotalPages = Math.max(
+        1,
+        Math.ceil(filteredImages.length / IMAGE_PAGE_LENGTH),
+    );
+
+    const paginatedImages = useMemo(() => {
+        const safePage = Math.min(imagePage, imageTotalPages);
+        const start = (safePage - 1) * IMAGE_PAGE_LENGTH;
+        return filteredImages.slice(start, start + IMAGE_PAGE_LENGTH);
+    }, [filteredImages, imagePage, imageTotalPages]);
+
     const imageById = useMemo(
         () => new Map(images.map((image) => [image.id, image])),
         [images],
@@ -148,10 +164,20 @@ export default function HumorAdminClient({
     }, [searchTerm]);
 
     useEffect(() => {
+        setImagePage(1);
+    }, [imageSearchTerm]);
+
+    useEffect(() => {
         if (currentPage > totalPages) {
             setCurrentPage(totalPages);
         }
     }, [currentPage, totalPages]);
+
+    useEffect(() => {
+        if (imagePage > imageTotalPages) {
+            setImagePage(imageTotalPages);
+        }
+    }, [imagePage, imageTotalPages]);
 
     async function refreshFlavors() {
         const body = await requestJson<{ humor_flavors: Flavor[] }>(
@@ -337,7 +363,7 @@ export default function HumorAdminClient({
     }
 
     function toggleAllFilteredImages() {
-        const filteredIds = filteredImages.map((image) => image.id);
+        const filteredIds = paginatedImages.map((image) => image.id);
         const allSelected = filteredIds.every((id) => selectedImageIds.has(id));
 
         setSelectedImageIds((prev) => {
@@ -349,6 +375,39 @@ export default function HumorAdminClient({
             }
             return next;
         });
+    }
+
+    function duplicateFlavor(flavor: Flavor) {
+        if (typeof window === "undefined") {
+            return;
+        }
+
+        const sortedSteps = [...flavor.humor_flavor_steps].sort(
+            (a, b) => a.order_by - b.order_by,
+        );
+        const draft = {
+            slug: flavor.slug,
+            description: flavor.description ?? "",
+            steps: sortedSteps.map((step) => ({
+                description: step.description ?? "",
+                llm_temperature:
+                    step.llm_temperature === null
+                        ? ""
+                        : String(step.llm_temperature),
+                llm_model_id: step.llm_model_id,
+                llm_input_type_id: step.llm_input_type_id,
+                llm_output_type_id: step.llm_output_type_id,
+                humor_flavor_step_type_id: step.humor_flavor_step_type_id,
+                llm_system_prompt: step.llm_system_prompt ?? "",
+                llm_user_prompt: step.llm_user_prompt ?? "",
+            })),
+        };
+
+        window.sessionStorage.setItem(
+            FLAVOR_DUPLICATE_STORAGE_KEY,
+            JSON.stringify(draft),
+        );
+        router.push("/humor-flavors/new?fromDuplicate=1");
     }
 
     return (
@@ -415,6 +474,7 @@ export default function HumorAdminClient({
                             loading={loading}
                             onSaveFlavor={saveFlavor}
                             onDeleteFlavor={deleteFlavor}
+                            onDuplicateFlavor={duplicateFlavor}
                             onCreateStep={createStep}
                             onSaveStep={saveStep}
                             onDeleteStep={deleteStep}
@@ -429,12 +489,23 @@ export default function HumorAdminClient({
                 <ImageTestPanel
                     imageSearchTerm={imageSearchTerm}
                     onImageSearchTermChange={setImageSearchTerm}
-                    filteredImages={filteredImages}
+                    images={paginatedImages}
                     selectedImageIds={selectedImageIds}
                     onToggleAllFilteredImages={toggleAllFilteredImages}
                     onToggleImageSelection={toggleImageSelection}
                     selectedFlavorId={selectedFlavorId}
                     loading={loading}
+                    imagePage={imagePage}
+                    imageTotalPages={imageTotalPages}
+                    onPreviousImagePage={() =>
+                        setImagePage((prev) => Math.max(1, prev - 1))
+                    }
+                    onNextImagePage={() =>
+                        setImagePage((prev) =>
+                            Math.min(imageTotalPages, prev + 1),
+                        )
+                    }
+                    onSelectImagePage={setImagePage}
                     onGenerateCaptions={() =>
                         selectedFlavorId && runFlavorTest(selectedFlavorId)
                     }

@@ -1,16 +1,7 @@
 import { redirect } from "next/navigation";
 import HumorAdminClient from "./HumorAdminClient";
 import { createClient } from "@/utils/supabase/server";
-
-type ImageRow = {
-  id: string;
-  url: string | null;
-  created_datetime_utc: string;
-  additional_context: string | null;
-  image_description: string | null;
-  is_public: boolean | null;
-  is_common_use: boolean | null;
-};
+import type { ImageRecord } from "./humor-admin/types";
 
 type CaptionRow = {
   image_id: string | null;
@@ -63,10 +54,19 @@ export default async function HomePage() {
         )
         .order("created_datetime_utc", { ascending: false })
         .limit(300),
-      supabase.from("captions").select("image_id").not("image_id", "is", null).limit(10000),
+      supabase
+        .from("captions")
+        .select("image_id")
+        .not("image_id", "is", null)
+        .limit(10000),
     ]);
 
-  const images = (imagesResult.data ?? []) as ImageRow[];
+  const flavors = (flavorsResult.data ?? []).map((flavor) => ({
+    ...flavor,
+    humor_flavor_steps: [...(flavor.humor_flavor_steps ?? [])].sort((a, b) => a.order_by - b.order_by),
+  }));
+
+  const images = (imagesResult.data ?? []) as ImageRecord[];
   const captionRows = (captionsResult.error ? [] : (captionsResult.data ?? [])) as CaptionRow[];
   const captionCountByImageId = new Map<string, number>();
 
@@ -93,11 +93,6 @@ export default async function HomePage() {
       new Date(a.created_datetime_utc).getTime()
     );
   });
-
-  const flavors = (flavorsResult.data ?? []).map((flavor) => ({
-    ...flavor,
-    humor_flavor_steps: [...(flavor.humor_flavor_steps ?? [])].sort((a, b) => a.order_by - b.order_by),
-  }));
 
   return (
     <HumorAdminClient

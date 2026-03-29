@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { FormEvent, useEffect, useState } from "react";
+import { FLAVOR_DUPLICATE_STORAGE_KEY } from "@/app/humor-admin/utils";
 
 type LookupItem = {
   id: number;
@@ -41,6 +42,12 @@ type StepDraft = {
   llm_user_prompt: string;
 };
 
+type DuplicateDraft = {
+  slug: string;
+  description: string;
+  steps: StepDraft[];
+};
+
 function getLookupLabel(item: LookupItem): string {
   return item.name || item.label || item.slug || item.description || `ID ${item.id}`;
 }
@@ -60,6 +67,7 @@ function createDefaultStep(lookups: Lookups): StepDraft {
 
 export default function NewFlavorClient({ initialLookups }: Props) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [slug, setSlug] = useState("");
   const [description, setDescription] = useState("");
   const [steps, setSteps] = useState<StepDraft[]>([createDefaultStep(initialLookups)]);
@@ -74,6 +82,66 @@ export default function NewFlavorClient({ initialLookups }: Props) {
       initialLookups.llm_output_types.length &&
       initialLookups.humor_flavor_step_types.length,
   );
+
+  useEffect(() => {
+    if (!searchParams.get("fromDuplicate")) {
+      return;
+    }
+
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const raw = window.sessionStorage.getItem(FLAVOR_DUPLICATE_STORAGE_KEY);
+    if (!raw) {
+      return;
+    }
+
+    window.sessionStorage.removeItem(FLAVOR_DUPLICATE_STORAGE_KEY);
+
+    try {
+      const parsed = JSON.parse(raw) as DuplicateDraft;
+      if (!parsed || typeof parsed !== "object") {
+        return;
+      }
+
+      const nextSlug = typeof parsed.slug === "string" ? parsed.slug : "";
+      const nextDescription =
+        typeof parsed.description === "string" ? parsed.description : "";
+      const nextSteps =
+        Array.isArray(parsed.steps) && parsed.steps.length
+          ? parsed.steps.map((step) => ({
+              description: step.description ?? "",
+              llm_temperature: step.llm_temperature ?? "",
+              llm_model_id:
+                typeof step.llm_model_id === "number"
+                  ? step.llm_model_id
+                  : initialLookups.llm_models[0]?.id ?? 0,
+              llm_input_type_id:
+                typeof step.llm_input_type_id === "number"
+                  ? step.llm_input_type_id
+                  : initialLookups.llm_input_types[0]?.id ?? 0,
+              llm_output_type_id:
+                typeof step.llm_output_type_id === "number"
+                  ? step.llm_output_type_id
+                  : initialLookups.llm_output_types[0]?.id ?? 0,
+              humor_flavor_step_type_id:
+                typeof step.humor_flavor_step_type_id === "number"
+                  ? step.humor_flavor_step_type_id
+                  : initialLookups.humor_flavor_step_types[0]?.id ?? 0,
+              llm_system_prompt: step.llm_system_prompt ?? "",
+              llm_user_prompt: step.llm_user_prompt ?? "",
+            }))
+          : [createDefaultStep(initialLookups)];
+
+      setSlug(nextSlug);
+      setDescription(nextDescription);
+      setSteps(nextSteps);
+      setActiveStepIndex(0);
+    } catch {
+      return;
+    }
+  }, [initialLookups, searchParams]);
 
   function updateStep(index: number, updater: (prev: StepDraft) => StepDraft) {
     setSteps((prev) => prev.map((step, i) => (i === index ? updater(step) : step)));

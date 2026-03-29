@@ -3,12 +3,17 @@ import { ImageRecord, TestResult } from "../types";
 type ImageTestPanelProps = {
     imageSearchTerm: string;
     onImageSearchTermChange: (value: string) => void;
-    filteredImages: ImageRecord[];
+    images?: ImageRecord[];
     selectedImageIds: Set<string>;
     onToggleAllFilteredImages: () => void;
     onToggleImageSelection: (imageId: string) => void;
     selectedFlavorId: number | null;
     loading: boolean;
+    imagePage?: number;
+    imageTotalPages?: number;
+    onPreviousImagePage?: () => void;
+    onNextImagePage?: () => void;
+    onSelectImagePage?: (page: number) => void;
     onGenerateCaptions: () => void;
     testResults: TestResult[];
     imageById: Map<string, ImageRecord>;
@@ -17,16 +22,26 @@ type ImageTestPanelProps = {
 export default function ImageTestPanel({
     imageSearchTerm,
     onImageSearchTermChange,
-    filteredImages,
+    images = [],
     selectedImageIds,
     onToggleAllFilteredImages,
     onToggleImageSelection,
     selectedFlavorId,
     loading,
+    imagePage = 1,
+    imageTotalPages = 1,
+    onPreviousImagePage = () => {},
+    onNextImagePage = () => {},
+    onSelectImagePage = () => {},
     onGenerateCaptions,
     testResults,
     imageById,
 }: ImageTestPanelProps) {
+    const imagePages = Array.from(
+        { length: imageTotalPages },
+        (_, index) => index + 1,
+    );
+
     return (
         <section className="panel">
             <h2>Flavor Test Set</h2>
@@ -40,18 +55,22 @@ export default function ImageTestPanel({
                     onImageSearchTermChange(event.target.value)
                 }
             />
-            <div className="row-buttons">
-                <button
-                    type="button"
-                    className="muted-button"
-                    onClick={onToggleAllFilteredImages}
-                >
-                    Toggle All Filtered
-                </button>
-                <span className="muted">Selected: {selectedImageIds.size}</span>
+            <div className="image-toolbar">
+                <div className="image-toolbar-left">
+                    <button
+                        type="button"
+                        className="muted-button"
+                        onClick={onToggleAllFilteredImages}
+                    >
+                        Toggle Page
+                    </button>
+                    <span className="image-pill">
+                        Selected: {selectedImageIds.size}
+                    </span>
+                </div>
             </div>
             <div className="image-picker-list">
-                {filteredImages.map((image) => {
+                {images.map((image) => {
                     const checked = selectedImageIds.has(image.id);
                     return (
                         <label
@@ -86,9 +105,47 @@ export default function ImageTestPanel({
                         </label>
                     );
                 })}
-                {!filteredImages.length && (
+                {!images.length && (
                     <p className="muted">No images match your search.</p>
                 )}
+            </div>
+            <div className="image-toolbar-right">
+                <span className="muted">
+                    Page {imagePage} of {imageTotalPages}
+                </span>
+                <div className="image-pager">
+                    <button
+                        type="button"
+                        className="muted-button"
+                        disabled={imagePage <= 1 || loading}
+                        onClick={onPreviousImagePage}
+                    >
+                        Previous
+                    </button>
+                    {imagePages.map((page) => (
+                        <button
+                            key={`image-page-${page}`}
+                            type="button"
+                            className={
+                                page === imagePage
+                                    ? "muted-button page-button active"
+                                    : "muted-button page-button"
+                            }
+                            disabled={loading}
+                            onClick={() => onSelectImagePage(page)}
+                        >
+                            {page}
+                        </button>
+                    ))}
+                    <button
+                        type="button"
+                        className="muted-button"
+                        disabled={imagePage >= imageTotalPages || loading}
+                        onClick={onNextImagePage}
+                    >
+                        Next
+                    </button>
+                </div>
             </div>
             <button
                 type="button"
