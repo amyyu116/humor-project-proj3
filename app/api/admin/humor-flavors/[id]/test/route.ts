@@ -33,7 +33,8 @@ export async function POST(req: Request, { params }: Params) {
     return NextResponse.json({ error: "Provide at least one image id" }, { status: 400 });
   }
 
-  if (!admin.accessToken) {
+  const bearerToken = admin.accessToken;
+  if (!bearerToken) {
     return NextResponse.json({ error: "No Supabase session token found" }, { status: 401 });
   }
 
@@ -90,7 +91,7 @@ export async function POST(req: Request, { params }: Params) {
           imageUrl: imageUrlById.get(imageId),
           humorFlavorId: flavorId,
           steps,
-          bearerToken: admin.accessToken,
+          bearerToken,
         });
 
         results[index] = {
